@@ -27,23 +27,21 @@ function Setup()
             -- while a double tap of G1 will press/release "b"
             G1 = (function(this)
                     function this.OnPressed(tapCount)
-                        if tapCount == 1 
-                        then PressKey("a")
-                        else PressKey("b")
+                        if tapCount == 1 then PressKey("a")
+                        elseif tapCount == 2 then PressKey("b")
+                        else PressKey("c")
                         end
-                        poll.Stop()
                     end
 
-                    function this.OnReleased(releaseCount)
-                        if releaseCount == 1 
-                        then ReleaseKey("a")
-                        else ReleaseKey("b")
+                    function this.OnReleased(tapCount)
+                        if tapCount == 1 then ReleaseKey("a")
+                        elseif tapCount == 2 then ReleaseKey("b")
+                        else ReleaseKey("c")
                         end
-                        poll.Start()
                     end
 
                     return this
-                end)(ButtonHandler(200, 2))
+                end)(ButtonHandler(300, 3))
         },
         any = {
             -- Profile activation/deactivation performed here
@@ -82,41 +80,67 @@ function ButtonHandler(
     local this = {}         -- the object to return
     local isPressed = false -- whether or not the button is pressed
     local pressTime = 0     -- when the button was pressed
-    local tapCount = 1      -- the number of key taps that have occurred
-    local releaseCount = 1  -- the number of key releases (matches tapCount)
+    local tapCount = 0      -- the number of key taps that have occurred
+    --local releaseCount = 1  -- the number of key releases (matches tapCount)
+    local isPolling = false
 
     -- set default values
     if multiTapSpan == nil then multiTapSpan = 0 end
     if maxTapCount == nil then maxTapCount = 0 end
+    
+    function PollRoutine()
+        local time = GetRunningTime() - pressTime
+        if time < multiTapSpan and tapCount < maxTapCount then
+            return true
+        end
+
+        isPolling = false
+        this.OnPressed(tapCount)
+        
+        if isPressed == false then
+            this.OnReleased(tapCount)
+            tapCount = 0
+        end
+        
+        return false
+    end
 
     -- called when the button is pressed
     function this.Pressed()
         isPressed = true
-
-        -- get the time since the last press time
-        local time = GetRunningTime() - pressTime
-
-        -- if time is within the multiTapSpan and the maximum tap count has
-        -- not been reached, increment the tap count ...
-        if time < multiTapSpan and tapCount < maxTapCount then
-            tapCount = tapCount + 1
-            releaseCount = tapCount
-        -- ... otherwise, reset the last pressed time and the tap count
-        else
+        
+        -- don't poll when only single taps are allowed
+        if maxTapCount <= 1 then
             pressTime = GetRunningTime()
-            tapCount = 1
-            releaseCount = 1
+            this.OnPressed(1)
+            return
         end
-
-        -- call the subclass-supplied OnPressed function
-        this.OnPressed(tapCount)
+        
+        if tapCount < maxTapCount then
+            tapCount = tapCount + 1
+        end
+        
+        if isPolling == false then
+            pressTime = GetRunningTime()
+            poll.RegisterPollRoutine(PollRoutine)
+            isPolling = true
+        end
     end
 
     -- called when the button is released
     function this.Released()
         isPressed = false
-        -- call the subclass-suppled OnReleased function
-        this.OnReleased(releaseCount)
+        
+        -- don't poll when only single taps are allowed
+        if maxTapCount <= 1 then
+            this.OnReleased(1)
+            return
+        end
+        
+        if isPolling == false then
+            this.OnReleased(tapCount)
+            tapCount = 0
+        end
     end
 
     -- expose isPressed using a public getter function
@@ -150,6 +174,7 @@ function Poll(pollFamily, delay, deviceFamily)
     local polling = false
     
     function this.Start()
+        if polling == true then return end
         polling = true
         pressCount = 1
         this.Run("PROFILE_ACTIVATED", 0, "")
@@ -189,18 +214,18 @@ function Poll(pollFamily, delay, deviceFamily)
 
         while routine ~= nil do
             if routine(event, arg, family) == false then
-                table.remove(t, idx)
-                routine = t[idx]
+                table.remove(pollRoutines, idx)
+                routine = pollRoutines[idx]
             else
                 idx = idx + 1
-                routine = t[idx]
+                routine = pollRoutines[idx]
             end
         end
     end
     
     function this.RegisterPollRoutine(routine)
         if type(routine) == "function" then
-            pollRoutines.insert(routine)
+            table.insert(pollRoutines, routine)
         end
     end
 
@@ -255,11 +280,10 @@ function OnEvent(event, arg, family)
 end
 
 
-
-
 --[[---------------------------------------------------------------------------
 HISTORY
 
+00.03   2011-04-01  Use polling in button multi-tap
 00.02   2011-04-01  Added Polling
 00.01   2011-03-31  Initial revision
 --]]---------------------------------------------------------------------------
