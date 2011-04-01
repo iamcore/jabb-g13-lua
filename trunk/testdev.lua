@@ -31,6 +31,7 @@ function Setup()
                         then PressKey("a")
                         else PressKey("b")
                         end
+                        poll.Stop()
                     end
 
                     function this.OnReleased(releaseCount)
@@ -38,6 +39,7 @@ function Setup()
                         then ReleaseKey("a")
                         else ReleaseKey("b")
                         end
+                        poll.Start()
                     end
 
                     return this
@@ -45,10 +47,18 @@ function Setup()
         },
         any = {
             -- Profile activation/deactivation performed here
-            P0 = {
-                Activated = function() end,
-                Deactivated = function() end
-            }
+            P0 = (function(this)
+                    
+                    function this.Activated()
+                        poll.Start()
+                    end
+                    
+                    function this.Deactivated()
+                        poll.Stop()
+                    end
+
+                    return this
+                end)({})
         }
     }
 end
@@ -119,12 +129,88 @@ function ButtonHandler(
     function this.OnPressed(tapCount) end
     function this.OnReleased(releaseCount) end
 
+    -- export public members
+    return this
+end
+
+--[[
+original source borrowed from bystander
+http://www.logitechusers.com/showthread.php?t=11168&highlight=poll&page=2
+
+--]]
+function Poll(pollFamily, delay, deviceFamily)
+    if delay == nil then delay = 25 end
+    if deviceFamily == nil then deviceFamily = pollFamily end
+    
+    local this = {}
+    local pressCount = 0
+    local pollMKeyState = GetMKeyState(pollFamily)
+    local deviceMKeyState = GetMKeyState(deviceFamily)
+    local pollRoutines = {}
+    local polling = false
+    
+    function this.Start()
+        polling = true
+        pressCount = 1
+        this.Run("PROFILE_ACTIVATED", 0, "")
+    end
+    
+    function this.Stop()
+        polling = false
+    end
+    
+    function this.Run(event, arg, family)
+        if polling == false or family ~= pollFamily and event ~= "PROFILE_ACTIVATED" then
+            return
+        end
+
+        if event == "M_PRESSED" then
+            pressCount = pressCount + 1
+        elseif event == "M_RELEASED" or event == "PROFILE_ACTIVATED" then
+            if pressCount == 1 then
+                RunPollRoutines(event, arg, family)
+                SetMKeyState(GetMKey(arg, family), pollFamily)
+                Sleep(delay)
+            end
+            pressCount = pressCount - 1
+        end
+    end
+    
+    function GetMKey(arg, family)
+        if family == pollFamily and pollMKeyState ~= arg then
+            pollMKeyState = arg
+        end
+        return pollMKeyState
+    end
+    
+    function RunPollRoutines(event, arg, family)
+        idx = 1
+        routine = pollRoutines[1]
+
+        while routine ~= nil do
+            if routine(event, arg, family) == false then
+                table.remove(t, idx)
+                routine = t[idx]
+            else
+                idx = idx + 1
+                routine = t[idx]
+            end
+        end
+    end
+    
+    function this.RegisterPollRoutine(routine)
+        if type(routine) == "function" then
+            pollRoutines.insert(routine)
+        end
+    end
+
     return this
 end
 
 
 
 
+poll = Poll("lhc", 25)
 
 -- setup the handlers
 handlers = Setup()
@@ -163,13 +249,17 @@ events = {
 
 -- entry point for logitech G* controllers
 function OnEvent(event, arg, family)
+    poll.Run(event, arg, family)
     local fn = events[event]
     if type(fn) == "function" then fn(arg, family) end
 end
 
 
+
+
 --[[---------------------------------------------------------------------------
 HISTORY
 
+00.02   2011-04-01  Added Polling
 00.01   2011-03-31  Initial revision
 --]]---------------------------------------------------------------------------
