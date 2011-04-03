@@ -40,13 +40,15 @@ end
 function OnEvent(event, arg, family)
     family = family or ""
     arg = arg or ""
-    if str:sub(1, 1) == "P" then arg = "" end
-    local eventarg = event..arg
-    local fn = eventHandlers[family..eventarg]
+    if event:sub(1, 1) == "P" then arg = "" end
+    local eventarg = event
+    if arg:len() > 0 then eventarg = event.."_"..arg end
+    local fn = eventHandlers[family.."_"..eventarg]
     if type(fn) == "function" then fn()
     else
         fn = eventHandlers[eventarg]
-        if type(fn) == "function" then fn() end
+        if type(fn) == "function" then fn()
+        end
     end
 end
 
@@ -188,10 +190,13 @@ end
 
 
 
+
 -- main function
+;
 (function()
     Setup()
     SetMode(mode1)
+    --OnEvent("PROFILE_ACTIVATED", 0, "")
     --handlers.lhc.G1.Pressed()
     --handlers.lhc.G1.Pressed()
 
