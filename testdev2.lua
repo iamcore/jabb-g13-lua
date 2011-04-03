@@ -24,35 +24,18 @@ function Setup()
                     function this.OnReleased(tapCount)
                         ReleaseKey(tapKeys[tapCount])
                     end
-                end, ButtonHandler)
+                end, ButtonHandler),
+            M1 = {},
+            Mouse1 = {},
+            ModCtl = {}
+        },
+        P = {
+            Activated = function() end,
+            Deactivated = function() end
         }
     }
 end
 
-function Setup2()
-    eventHandlers = {
-        lhc_G_PRESSED_1 = handlers.lhc.G1.Pressed(),
-        lhc_G_RELEASED_1 = handlers.lhc.G1.Released()
-    }
-end
-
-function SetMode(mode)
-    mode = mode or {}
-
-    eventHandlers = { kb = {}, lhc = {} }
-    local familyTable
-
-    for family, handlers in mode do
-        if eventHandlers[family] ~= nil then
-            familyTable = eventHandlers[family]
-        else
-            familyTable = eventHandlers
-        end
-
-        for eventHandler, object in handlers do
-            if eventHan
-        end
-end
 
 function OnEvent(event, arg, family)
     family = family or ""
@@ -112,6 +95,61 @@ function EventHandler(this)
     end
 end
 
+eventAbbrToName = {
+    P = { "P", "PROFILE", { "ACTIVATED", "Activated" }, { "DEACTIVATED", "Deactivated" } },
+    M = { "M", "M", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } },
+    G = { "G", "G", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } },
+    MOU = { "MOUSE", "MOUSE", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } },
+    MOD = { "MOD", "MOD", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } }
+}
+
+
+function Setup2()
+    eventHandlers = {
+        lhc_G_PRESSED_1 = handlers.lhc.G1.Pressed(),
+        lhc_G_RELEASED_1 = handlers.lhc.G1.Released()
+    }
+end
+
+function SetMode(mode)
+    mode = mode or {}
+
+    eventHandlers = {}
+
+    local eHandlers = { kb = {}, lhc = {} }
+    local familyTable, eventAbbr, eventAbbrLookup, eventName, arg, temp, fullName, partName
+
+    for family, handlers in pairs(mode) do
+        if eHandlers[family] ~= nil then
+        else
+            handlers = { [family] = mode[family] }
+            family = ""
+        end
+
+        for eventHandler, object in pairs(handlers) do
+            if family == "" then fullName = ""
+            else fullName = family.."_" end
+            eventAbbr = eventHandler:sub(1, 1):upper()
+            if eventAbbr == "M" and eventHandler:len() > 2 then
+                temp = eventHandler:sub(1, 3):upper()
+                if eventAbbrToName[temp] ~= nill then
+                    eventAbbr = temp
+                end
+            end
+            eventAbbrLookup = eventAbbrToName[eventAbbr]
+            arg = eventHandler:sub(eventAbbrLookup[1]:len() + 1)
+            eventName = eventAbbrLookup[2]
+            for i = 3, 4 do
+                partName = eventName.."_"..eventAbbrLookup[i][1]
+                if arg:len() > 0 then
+                    partName = partName.."_"..arg:upper()
+                end
+                eventHandlers[fullName..partName] = object[eventAbbrLookup[i][2]]
+                print(fullName..partName, eventHandlers[fullName..partName])
+            end
+        end
+    end
+end
 
 
 
@@ -119,7 +157,7 @@ function inherit(this, ...)
     this = this or {}
 
     local item, current, base
-    for i = select('#', ...) , 1, -1 do
+    for i = select('#', ...), 1, -1 do
         item = select(i, ...)
         if (type(item)) == "function" then
             current = {}
@@ -149,16 +187,14 @@ function new(constructor, ...)
 end
 
 
-str = "TEST"
-print(str:sub(1, 1));
 
 
 -- main function
 (function()
     Setup()
+    SetMode(mode1)
+    --handlers.lhc.G1.Pressed()
+    --handlers.lhc.G1.Pressed()
 
-    handlers.lhc.G1.Pressed()
-    handlers.lhc.G1.Pressed()
-
-    handlers.lhc.G1.Test()
+    --handlers.lhc.G1.Test()
 end)()
