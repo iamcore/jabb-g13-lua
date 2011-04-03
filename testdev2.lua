@@ -116,36 +116,35 @@ function SetMode(mode)
 
     eventHandlers = {}
 
-    local eHandlers = { kb = {}, lhc = {} }
-    local familyTable, eventAbbr, eventAbbrLookup, eventName, arg, temp, fullName, partName
+    local families = { kb = 0, lhc = 0 }
+    local eventAbbr, eventAbbrLookup, eventName, arg, temp, partName
 
     for family, handlers in pairs(mode) do
-        if eHandlers[family] ~= nil then
+        if families[family] ~= nil then
+            family = family.."_"
         else
             handlers = { [family] = mode[family] }
             family = ""
         end
 
-        for eventHandler, object in pairs(handlers) do
-            if family == "" then fullName = ""
-            else fullName = family.."_" end
-            eventAbbr = eventHandler:sub(1, 1):upper()
-            if eventAbbr == "M" and eventHandler:len() > 2 then
-                temp = eventHandler:sub(1, 3):upper()
+        for handler, object in pairs(handlers) do
+            eventAbbr = handler:sub(1, 1):upper()
+            if eventAbbr == "M" and handler:len() > 2 then
+                temp = handler:sub(1, 3):upper()
                 if eventAbbrToName[temp] ~= nill then
                     eventAbbr = temp
                 end
             end
             eventAbbrLookup = eventAbbrToName[eventAbbr]
-            arg = eventHandler:sub(eventAbbrLookup[1]:len() + 1)
+            arg = handler:sub(eventAbbrLookup[1]:len() + 1)
             eventName = eventAbbrLookup[2]
             for i = 3, 4 do
                 partName = eventName.."_"..eventAbbrLookup[i][1]
                 if arg:len() > 0 then
                     partName = partName.."_"..arg:upper()
                 end
-                eventHandlers[fullName..partName] = object[eventAbbrLookup[i][2]]
-                print(fullName..partName, eventHandlers[fullName..partName])
+                eventHandlers[family..partName] = object[eventAbbrLookup[i][2]]
+                print(family..partName, eventHandlers[family..partName])
             end
         end
     end
