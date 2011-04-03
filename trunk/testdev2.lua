@@ -9,62 +9,62 @@ end
 
 
 function Setup()
-	mode1 = {
-		kb = {
-		},
-		lhc = {
-			G1 = new (function(this)
-					this.Init(300, 3)
-					local tapKeys = { "a", "b", "c" }
+    mode1 = {
+        kb = {
+        },
+        lhc = {
+            G1 = new (function(this)
+                    this.Init(300, 3)
+                    local tapKeys = { "a", "b", "c" }
 
-					function this.OnPressed(tapCount)
-						PressKey(tapKeys[tapCount])
-					end
+                    function this.OnPressed(tapCount)
+                        PressKey(tapKeys[tapCount])
+                    end
 
-					function this.OnReleased(tapCount)
-						ReleaseKey(tapKeys[tapCount])
-					end
-				end, ButtonHandler)
-		}
-	}
+                    function this.OnReleased(tapCount)
+                        ReleaseKey(tapKeys[tapCount])
+                    end
+                end, ButtonHandler)
+        }
+    }
 end
 
 function Setup2()
-	eventHandlers = {
-		lhc_G_PRESSED_1 = handlers.lhc.G1.Pressed(),
-		lhc_G_RELEASED_1 = handlers.lhc.G1.Released()
-	}
+    eventHandlers = {
+        lhc_G_PRESSED_1 = handlers.lhc.G1.Pressed(),
+        lhc_G_RELEASED_1 = handlers.lhc.G1.Released()
+    }
 end
 
 function SetMode(mode)
-	mode = mode or {}
+    mode = mode or {}
 
-	eventHandlers = { kb = {}, lhc = {} }
-	local familyTable
+    eventHandlers = { kb = {}, lhc = {} }
+    local familyTable
 
-	for family, handlers in mode do
-		if eventHandlers[family] ~= nil then
-			familyTable = eventHandlers[family]
-		else
-			familyTable = eventHandlers
-		end
+    for family, handlers in mode do
+        if eventHandlers[family] ~= nil then
+            familyTable = eventHandlers[family]
+        else
+            familyTable = eventHandlers
+        end
 
-		for eventHandler, object in handlers do
-			if eventHan
-		end
+        for eventHandler, object in handlers do
+            if eventHan
+        end
 end
 
 function OnEvent(event, arg, family)
-	family = family or ""
-	arg = arg or ""
-	if str:sub(1, 1) == "P" then arg = "" end
-	local eventarg = event..arg
-	local fn = eventHandlers[family..eventarg]
-	if type(fn) == "function" then fn()
-	else
-		fn = eventHandlers[eventarg]
-		if type(fn) == "function" then fn() end
-	end
+    family = family or ""
+    arg = arg or ""
+    if str:sub(1, 1) == "P" then arg = "" end
+    local eventarg = event..arg
+    local fn = eventHandlers[family..eventarg]
+    if type(fn) == "function" then fn()
+    else
+        fn = eventHandlers[eventarg]
+        if type(fn) == "function" then fn() end
+    end
 end
 
 function ButtonHandler(this)
@@ -98,18 +98,18 @@ function ButtonHandler(this)
 end
 
 function EventHandler(this)
-	local family
-	local name
-	local arg
-	local event
+    local family
+    local name
+    local arg
+    local event
 
-	function this.Init(n, e)
-		name = n
-		event = e
-	end
+    function this.Init(n, e)
+        name = n
+        event = e
+    end
 
-	function this.OnEvent(eventName, arg, family)
-	end
+    function this.OnEvent(eventName, arg, family)
+    end
 end
 
 
