@@ -1,13 +1,3 @@
-function PressKey(key)
-    print("PressKey "..key)
-end
-
-function ReleaseKey(key)
-    print("ReleaseKey "..key)
-end
-
-
-
 function Setup()
     mode1 = {
         kb = {
@@ -18,6 +8,7 @@ function Setup()
                     local tapKeys = { "a", "b", "c" }
 
                     function this.OnPressed(tapCount)
+                        OutputLogMessage("test")
                         PressKey(tapKeys[tapCount])
                     end
 
@@ -30,7 +21,7 @@ function Setup()
             ModCtl = {}
         },
         P = {
-            Activated = function() end,
+            Activated = function(event, arg, family) OutputLogMessage("Profile Activated\n") end,
             Deactivated = function() end
         }
     }
@@ -39,17 +30,18 @@ end
 
 function OnEvent(event, arg, family)
     family = family or ""
-    arg = arg or ""
+    arg = string.format("%d",arg) or ""
     if event:sub(1, 1) == "P" then arg = "" end
     local eventarg = event
     if arg:len() > 0 then eventarg = event.."_"..arg end
     local fn = eventHandlers[family.."_"..eventarg]
-    if type(fn) == "function" then fn()
+    if type(fn) == "function" then fn(event, arg, family)
     else
         fn = eventHandlers[eventarg]
-        if type(fn) == "function" then fn()
+        if type(fn) == "function" then fn(event, arg, family)
         end
     end
+    OutputLogMessage(family.."_"..eventarg.." : "..type(fn).."\n")
 end
 
 function ButtonHandler(this)
@@ -68,34 +60,129 @@ function ButtonHandler(this)
 
     function this.Pressed()
         isPressed = true
-        tapCount = tapCount + 1
+
+        -- don't poll when only single taps are allowed
+		if tapMax <= 1 then
+            pressTime = GetRunningTime()
+            this.OnPressed(1)
+            return
+        end
+
+        if tapCount < tapMax  then
+            tapCount = tapCount + 1
+        end
+
+		if isPolling == false then
+            pressTime = GetRunningTime()
+            poll.RegisterPollRoutine(PollRoutine)
+            isPolling = true
+        end
     end
 
     function this.Released()
         isPressed = false
+
+        -- don't poll when only single taps are allowed
+        if tapMax <= 1 then
+            this.OnReleased(1)
+            return
+        end
+
+        if isPolling == false then
+            this.OnReleased(tapCount)
+            tapCount = 0
+        end
     end
 
-    function this.Test()
+    function PollRoutine()
+        local time = GetRunningTime() - pressTime
+        if time < tapDuration and tapCount < tapMax then
+            return true
+        end
+
+        isPolling = false
         this.OnPressed(tapCount)
-        this.OnReleased(tapCount)
-        tapCount = 0
+
+        if isPressed == false then
+            this.OnReleased(tapCount)
+            tapCount = 0
+        end
+
+        return false
     end
 end
 
-function EventHandler(this)
-    local family
-    local name
-    local arg
-    local event
+function PollManager(this)
+    local family = "kb"
+    local delay = 25
 
-    function this.Init(n, e)
-        name = n
-        event = e
+    local pressCount
+    local pollMKeyState = GetMKeyState(pollFamily)
+    local pollRoutines = {}
+    local polling = false
+    local initialized = false
+
+    function this.Init(f, d)
+        family = f or "kb"
+        delay = d or 25
     end
 
-    function this.OnEvent(eventName, arg, family)
+    function this.OnEvent(event, family)
+        if family ~= pollFamily and event ~= "PROFILE_ACTIVATED" then
+            return
+        end
+
+        if event == "M_PRESSED" then
+            pressCount = pressCount + 1
+        elseif event == "M_RELEASED" or event == "PROFILE_ACTIVATED" then
+            initialized = true
+            if pressCount == 1 then
+                if RunPollRoutines(event, arg, family) == true then
+                    SetMKeyState(GetMKey(arg, family), pollFamily)
+                    Sleep(delay)
+                end
+            end
+            pressCount = pressCount - 1
+        end
+    end
+
+    function this.RegisterPollRoutine(routine)
+        if type(routine) == "function" then
+            table.insert(pollRoutines, routine)
+            if initialized then
+                OnEvent("PROFILE_ACTIVATED", family)
+            end
+        end
+    end
+
+    function GetMKey(arg, f)
+        if f == family and pollMKeyState ~= arg then
+            pollMKeyState = arg
+        end
+        return pollMKeyState
+    end
+
+    function RunPollRoutines(event, arg, family)
+        polling = false
+
+        local idx = 1
+        local routine = pollRoutines[1]
+
+        while routine ~= nil do
+            polling = true
+
+            if routine(event, arg, family) == false then
+                table.remove(pollRoutines, idx)
+                routine = pollRoutines[idx]
+            else
+                idx = idx + 1
+                routine = pollRoutines[idx]
+            end
+        end
     end
 end
+
+poll = new(PollManager).Init("lhc", 25)
 
 eventAbbrToName = {
     P = { "P", "PROFILE", { "ACTIVATED", "Activated" }, { "DEACTIVATED", "Deactivated" } },
