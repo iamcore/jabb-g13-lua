@@ -105,13 +105,14 @@ eventAbbrToName = {
     MOD = { "MOD", "MOD", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } }
 }
 
+--[[
+eventHandlers = {
+    lhc_G_PRESSED_1 = handlers.lhc.G1.Pressed(),
+    lhc_G_RELEASED_1 = handlers.lhc.G1.Released()
+}
+--]]
 
-function Setup2()
-    eventHandlers = {
-        lhc_G_PRESSED_1 = handlers.lhc.G1.Pressed(),
-        lhc_G_RELEASED_1 = handlers.lhc.G1.Released()
-    }
-end
+eventHandlers = {}
 
 function SetMode(mode)
     mode = mode or {}
@@ -146,7 +147,6 @@ function SetMode(mode)
                     partName = partName.."_"..arg:upper()
                 end
                 eventHandlers[family..partName] = object[eventAbbrLookup[i][2]]
-                print(family..partName, eventHandlers[family..partName])
             end
         end
     end
