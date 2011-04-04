@@ -1,10 +1,16 @@
 function Setup()
-    mode1 = {
+    poll = new(PollManager).Init("kb", 25)
+    local pollModifiers = new(PollModifiers)
+    local pollMouse = new(PollMouse)
+
+    local g2 = BindMacro(tap("a"), tap("b"), tap("c"))
+
+    local mode1 = {
         kb = {
         },
         lhc = {
             G1 = new(function(this)
-                    this.Init(350, 3)
+                    this.Init(25, 3)
                     local tapKeys = { "a", "b", "c" }
 
                     function this.OnPressed(tapCount)
@@ -15,6 +21,7 @@ function Setup()
                         ReleaseKey(tapKeys[tapCount])
                     end
                 end, ButtonHandler),
+            G2 = g2
         },
         P = {
             Activated = function (event, arg, family) OutputLogMessage("Profile Activated\n") end,
@@ -23,7 +30,7 @@ function Setup()
         Mouse1 = new(function(this)
                 this.Init(200, 2)
                 local clickMessages = { "Mouse1 Clicked", "Mouse1 Double-Clicked" }
-                function this.OnPressed(clickCount) OutputLogMessage(clickMessages[clickCount].."\n") end
+                function this.OnPressed(clickCount) OutputLogMessage(clickMessages[clickCount].."\n") pollModifiers.Stop() end
             end, ButtonHandler),
         ModCtrl = new(function(this)
                 function this.OnPressed() OutputLogMessage("Ctrl pressed\n") end
@@ -32,9 +39,248 @@ function Setup()
     }
 
     SetMode(mode1)
-    poll = new(PollManager).Init("lhc", 25)
-    pollModifiers = new(PollModifiers).Start();
-    pollMouse = new(PollMouse).Start();
+
+    pollModifiers.Start();
+    --pollMouse.Start();
+end
+
+function MacroKey(this)
+    local key
+    local delay = 0
+    local cooldown = 0
+    local lastRunTime = nil
+    local isKeyDown = false
+
+    function this.Init(k, d, c)
+        key = k
+        if type(d) == "number" then d = delay end
+        if type(c) == "number" then c = cooldown end
+        lastRunTime = -cooldown
+        return this
+    end
+
+    function this.Run()
+        local time = GetRunningTime()
+        if time >= lastRunTime + cooldown then
+            lastRunTime = time
+            isKeyDown = this.OnRun(key)
+        end
+
+        return delay
+    end
+
+    function this.Release()
+        if isKeyDown then this.OnRelease(key) end
+    end 
+
+    function this.IsKeyDown()
+        return isKeyDown
+    end
+
+    function this.OnRun(key) end
+    function this.OnRelease(key) end
+end
+
+function MacroKeyDown(this)
+    inherit(this, MacroKey)
+    
+    function this.OnRun(key)
+        PressKey(key)
+        return true
+    end
+
+    function this.OnRelease(key)
+        ReleaseKey(key)
+    end
+end
+
+function MacroKeyUp(this)
+    inherit(this, MacroKey)
+    
+    function this.OnRun(key)
+        ReleaseKey(key)
+        return false
+    end
+end
+
+function MacroKeyTap(this)
+    inherit(this, MacroKey)
+    
+    function this.OnRun(key)
+        PressAndReleaseKey(key)
+        return false
+    end
+end
+
+function MacroMNudge(this)
+    inherit(this, MacroKey)
+
+    function this.OnRun(coord)
+        MouseMoveRelative(coord[1], coord[2])
+        return false
+    end
+end
+
+function MacroMMove(this)
+    inherit(this, MacroKey)
+
+    function this.OnRun(coord)
+        MouseMoveTo(coord[1], coord[2])
+        return false
+    end
+end
+
+function MacroMWheel(this)
+    inherit(this, MacroKey)
+
+    function this.OnRun(amount)
+        MoveMouseWheel(amount)
+        return false
+    end
+end
+
+function MacroMButtonDown(this)
+    inherit(this, MacroKey)
+    
+    function this.OnRun(button)
+        PressMouseButton(button)
+        return true
+    end
+
+    function this.OnRelease(button)
+        ReleaseMouseButton(button)
+        return true
+    end
+end
+
+function MacroMButtonUp(this)
+    inherit(this, MacroKey)
+
+    function this.OnRun(button)
+        ReleaseMouseButton(button)
+        return false
+    end
+end
+
+function MacroMButtonTap(this)
+    inherit(this, MacroKey)
+
+    function this.OnRun(button)
+        PressAndReleaseMouseButton(button)
+        return false
+    end
+end
+
+function MacroMSavePos(this)
+    inherit(this, MacroKey)
+    local x = 0
+    local y = 0
+
+    function this.OnRun()
+        x, y = GetMousePosition()
+        return false
+    end
+
+    function this.Recall()
+        MouseMoveTo(x, y)
+    end
+
+    function this.X(v) if v ~= nil then x = v return this end return x end
+    function this.Y(v) if v ~= nil then y = v return this end return y end
+end
+
+function down(key, delay, cooldown) return new(MacroKeyDown).Init(key, delay, cooldown) end
+function up(key, delay, cooldown) return new(MacroKeyUp).Init(key, delay, cooldown) end
+function tap(key, delay, cooldown) return new(MacroKeyTap).Init(key, delay, cooldown) end
+function mnudge(coord, delay, cooldown) return new(MacroMNudge).Init(coord, delay, cooldown) end
+function mmove(coord, delay, cooldown) return new(MacroMMove).Init(coord, delay, cooldown) end
+function mwheel(amount, delay, cooldown) return new(MacroMWheel).Init(amount, delay, cooldown) end
+function mbdown(button, delay, cooldown) return new(MacroMButtonDown).Init(button, delay, cooldown) end
+function mbup(button, delay, cooldown) return new(MacroMButtonUp).Init(button, delay, cooldown) end
+function mbtap(button, delay, cooldown) return new(MacroMButtonTap).Init(button, delay, cooldown) end
+function msave(delay, cooldown) return new(MacroMSavePos).Init(nil, delay, cooldown) end
+
+function Macro(this)
+    local steps = {}
+    local unreleased = {}
+    local loop = false
+    local isPolling = false
+    local currentStep
+    local delayUntil
+    local stepCount
+    local loopCount
+    
+    local function PollRoutine()
+        if isPolling == false then return false end
+        
+        if currentStep > stepCount then
+            if loop == false then
+                isPolling = false
+                return false
+            elseif type(loop) == "number" then
+                if loopCount > loop then
+                    isPolling = false
+                    return false
+                else
+                    loopCount = loopCount + 1
+                    currentStepCount = 1
+                end
+            end
+        end
+
+        local time = GetRunningTime()
+        OutputLogMessage(time..":"..delayUntil.."\n")
+        if time > delayUntil then
+            delayUntil = time + steps[currentStep].Run()
+            currentStep = currentStep + 1
+        end
+    end
+    
+    function this.Init(...)
+        stepCount = select('#', ...)
+        for i = 1, stepCount do
+            local item = select(i, ...)
+            table.insert(steps, item)
+        end
+        return this
+    end
+    
+    function this.Loop(v) if v ~= nil then loop = v return this end return loop end
+    
+    function this.Run()
+        if isPolling == false then
+            isPolling = true
+            currentStep = 1
+            loopCount = 1
+            delayUntil = -1
+            poll.RegisterPollRoutine(PollRoutine)
+        end
+    end
+    
+    function this.Abort()
+        isPolling = false
+        for i = 1, stepCount do
+            steps[i].Release()
+        end
+    end
+end
+
+function NewMacro(...)
+    return new(Macro).Init(...)
+end
+
+function BindMacro(...)
+    local this = new(Macro).Init(...);
+    inherit(this, ButtonHandler)
+    
+    function this.OnPressed()
+        this.Run()
+    end
+
+    function this.OnReleased()
+        this.Abort()
+    end
+    return this
 end
 
 function PollMouse(this)
@@ -101,7 +347,6 @@ function PollModifiers(this)
                 OnEvent("MOD", "RELEASED_"..k:upper(), "")
             end
         end
-
         return true
     end
 
@@ -209,29 +454,6 @@ function PollManager(this)
         return pollMKeyState
     end
 
-    local function RunPollRoutines(event, arg, family)
-        polling = false
-
-        local idx = 1
-        local routine = pollRoutines[1]
-
-        while routine ~= nil do
-            if routine(event, arg, family) == false then
-                table.remove(pollRoutines, idx)
-                routine = pollRoutines[idx]
-            else
-                polling = true
-                idx = idx + 1
-                routine = pollRoutines[idx]
-            end
-        end
-
-        if polling then
-            SetMKeyState(GetMKey(arg, family), pollFamily)
-            Sleep(pollDelay)
-        end
-    end
-
     function this.Init(family, delay)
         pollFamily = family or "kb"
         pollDelay = delay or 25
@@ -240,24 +462,36 @@ function PollManager(this)
     end
 
     function this.OnEvent(event, arg, family)
-        if family ~= pollFamily and event ~= "PROFILE_ACTIVATED" then
-            return
-        end
+        if event == "PROFILE_ACTIVATED" or (event == "M_RELEASED" and family == "kb") then
+            polling = false
 
-        if event == "M_PRESSED" then
-            pressCount = pressCount + 1
-        elseif event == "M_RELEASED" or event == "PROFILE_ACTIVATED" then
-            if pressCount == 1 then
-                RunPollRoutines(event, arg, family)
+            local idx = 1
+            local routine = pollRoutines[1]
+
+            while routine ~= nil do
+                if routine(event, arg, family) == false then
+                    table.remove(pollRoutines, idx)
+                    routine = pollRoutines[idx]
+                else
+                    polling = true
+                    idx = idx + 1
+                    routine = pollRoutines[idx]
+                end
             end
-            pressCount = pressCount - 1
+
+            if polling then
+                SetMKeyState(1, "kb")--GetMKey(arg, family), pollFamily)
+                Sleep(pollDelay)
+            end
         end
     end
 
     function this.RegisterPollRoutine(routine)
         if type(routine) == "function" then
             table.insert(pollRoutines, routine)
-            RunPollRoutines()
+            if polling == false then
+                this.OnEvent("PROFILE_ACTIVATED")
+            end
         end
     end
 end
@@ -300,10 +534,10 @@ function SetMode(mode)
     end
 
 --[[ for testing:
-]]
     for k, v in pairs(eventHandlers) do
         OutputLogMessage(k.."\n")
     end
+]]
 end
 
 function inherit(this, ...)
@@ -356,7 +590,7 @@ eventHandlers = {
 --]]
 
 eventHandlers = {}
-
+eventCount = 0
 function OnEvent(event, arg, family)
     poll.OnEvent(event, arg, family)
     if family == nil then family = "" end
@@ -367,12 +601,14 @@ function OnEvent(event, arg, family)
     elseif type(arg) == "string" and arg:len() > 0 then eventarg = event.."_"..arg
     end
     local fn = eventHandlers[family.."_"..eventarg]
-    if type(fn) == "function" then fn(event, arg, family)
+    if type(fn) == "function" then OutputLogMessage(eventCount.." : "..family..eventarg.."\n") fn(event, arg, family)
     else
         fn = eventHandlers[eventarg]
-        if type(fn) == "function" then fn(event, arg, family)
+        if type(fn) == "function" then OutputLogMessage(eventCount.." : "..family..eventarg.."\n") fn(event, arg, family)
         end
     end
+    --OutputLogMessage(eventCount.." : "..family..eventarg.."\n")
+    eventCount = eventCount + 1
 end
 
 Setup()
