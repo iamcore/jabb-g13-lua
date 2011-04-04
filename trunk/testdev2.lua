@@ -3,8 +3,8 @@ function Setup()
         kb = {
         },
         lhc = {
-            G1 = new (function(this)
-                    this.Init(300, 4)
+            G1 = new(function(this)
+                    this.Init(350, 3)
                     local tapKeys = { "a", "b", "c" }
 
                     function this.OnPressed(tapCount)
@@ -15,34 +15,108 @@ function Setup()
                         ReleaseKey(tapKeys[tapCount])
                     end
                 end, ButtonHandler),
-            M1 = {},
-            Mouse1 = {},
-            ModCtl = {}
         },
         P = {
-            Activated = function(event, arg, family) OutputLogMessage("Profile Activated\n") end,
-            Deactivated = function() end
-        }
+            Activated = function (event, arg, family) OutputLogMessage("Profile Activated\n") end,
+            Deactivated = function () OutputLogMessage("Profile Activated\n") end
+        },
+        Mouse1 = new(function(this)
+                this.Init(200, 2)
+                local clickMessages = { "Mouse1 Clicked", "Mouse1 Double-Clicked" }
+                function this.OnPressed(clickCount) OutputLogMessage(clickMessages[clickCount].."\n") end
+            end, ButtonHandler),
+        ModCtrl = new(function(this)
+                function this.OnPressed() OutputLogMessage("Ctrl pressed\n") end
+                function this.OnReleased() OutputLogMessage("Ctrl released\n") end
+            end, ButtonHandler)
     }
+
+    SetMode(mode1)
+    poll = new(PollManager).Init("lhc", 25)
+    pollModifiers = new(PollModifiers).Start();
+    pollMouse = new(PollMouse).Start();
 end
 
+function PollMouse(this)
+    local isPolling = false
+    local mouseButtons = { false, false, false, false, false }
+    
+    local function PollRoutine()
+        if isPolling == false then return false end
 
-function OnEvent(event, arg, family)
-    poll.OnEvent(event, arg, family)
-    if family == nil then family = "" end
-    if arg == nil then arg = "" end
-    --if type(arg) == "number" arg = string.format("%d",arg) end
-    if event:sub(1, 1) == "P" then arg = "" end
-    local eventarg = event
-    if type(arg) == "number" and arg > 0 then eventarg = event.."_"..arg end
-    local fn = eventHandlers[family.."_"..eventarg]
-    if type(fn) == "function" then fn(event, arg, family)
-    else
-        fn = eventHandlers[eventarg]
-        if type(fn) == "function" then fn(event, arg, family)
+        for i, v in ipairs(mouseButtons) do
+            if IsMouseButtonPressed(i) then
+                if v == false then
+                    mouseButtons[i] = true
+                    OnEvent("MOUSE", "PRESSED_"..i, "")
+                end
+            elseif v == true then
+                mouseButtons[i] = false
+                OnEvent("MOUSE", "RELEASED_"..i, "")
+            end
         end
+
+        return true
     end
-    --OutputLogMessage(family.."_"..eventarg.." : "..type(fn).."\n")
+
+    function this.Start()
+        if isPolling == false then
+            isPolling = true
+            poll.RegisterPollRoutine(PollRoutine)
+        end
+        return this
+    end
+
+    function this.Stop()
+        isPolling = false
+        return this
+    end
+end
+
+function PollModifiers(this)
+    local isPolling = false
+    local modKeys = {
+        lalt = false,
+        ralt = false,
+        alt = false,
+        lshift = false,
+        rshift = false,
+        shift = false,
+        lctrl = false,
+        rctrl = false,
+        ctrl = false
+    }
+    
+    local function PollRoutine()
+        if isPolling == false then return false end
+
+        for k, v in pairs(modKeys) do
+            if IsModifierPressed(k) then
+                if v == false then
+                    modKeys[k] = true
+                    OnEvent("MOD", "PRESSED_"..k:upper(), "")
+                end
+            elseif v == true then
+                modKeys[k] = false
+                OnEvent("MOD", "RELEASED_"..k:upper(), "")
+            end
+        end
+
+        return true
+    end
+
+    function this.Start()
+        if isPolling == false then
+            isPolling = true
+            poll.RegisterPollRoutine(PollRoutine)
+        end
+        return this
+    end
+
+    function this.Stop()
+        isPolling = false
+        return this
+    end
 end
 
 function ButtonHandler(this)
@@ -55,7 +129,6 @@ function ButtonHandler(this)
 
     local function PollRoutine()
         local time = GetRunningTime() - pressTime
-        --OutputLogMessage("time "..time..", tapCount "..tapCount.."\n")
         if time < tapDuration and tapCount < tapMax then
             return true
         end
@@ -113,6 +186,9 @@ function ButtonHandler(this)
             tapCount = 0
         end
     end
+
+    function this.OnPressed() end
+    function this.OnReleased() end
 end
 
 function PollManager(this)
@@ -133,11 +209,7 @@ function PollManager(this)
         return pollMKeyState
     end
 
-    pollCount = 0
-
     local function RunPollRoutines(event, arg, family)
-        pollCount = pollCount + 1
-        OutputLogMessage(pollCount.."\n")
         polling = false
 
         local idx = 1
@@ -155,7 +227,6 @@ function PollManager(this)
         end
 
         if polling then
-            --OutputLogMessage("polling M = "..GetMKey(arg, family)..", f = "..pollFamily.."\n")
             SetMKeyState(GetMKey(arg, family), pollFamily)
             Sleep(pollDelay)
         end
@@ -169,10 +240,9 @@ function PollManager(this)
     end
 
     function this.OnEvent(event, arg, family)
-        
-        --if family ~= pollFamily and event ~= "PROFILE_ACTIVATED" then
-        --    return
-        --end
+        if family ~= pollFamily and event ~= "PROFILE_ACTIVATED" then
+            return
+        end
 
         if event == "M_PRESSED" then
             pressCount = pressCount + 1
@@ -187,30 +257,10 @@ function PollManager(this)
     function this.RegisterPollRoutine(routine)
         if type(routine) == "function" then
             table.insert(pollRoutines, routine)
-            --if initialized then
-            --OutputLogMessage("RegisterPollRoutine "..type(routine).."\n")
             RunPollRoutines()
-            --end
         end
     end
 end
-
-eventAbbrToName = {
-    P = { "P", "PROFILE", { "ACTIVATED", "Activated" }, { "DEACTIVATED", "Deactivated" } },
-    M = { "M", "M", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } },
-    G = { "G", "G", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } },
-    MOU = { "MOUSE", "MOUSE", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } },
-    MOD = { "MOD", "MOD", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } }
-}
-
---[[
-eventHandlers = {
-    lhc_G_PRESSED_1 = handlers.lhc.G1.Pressed(),
-    lhc_G_RELEASED_1 = handlers.lhc.G1.Released()
-}
---]]
-
-eventHandlers = {}
 
 function SetMode(mode)
     mode = mode or {}
@@ -248,9 +298,13 @@ function SetMode(mode)
             end
         end
     end
+
+--[[ for testing:
+]]
+    for k, v in pairs(eventHandlers) do
+        OutputLogMessage(k.."\n")
+    end
 end
-
-
 
 function inherit(this, ...)
     this = this or {}
@@ -286,9 +340,39 @@ function new(constructor, ...)
 end
 
 
+eventAbbrToName = {
+    P = { "P", "PROFILE", { "ACTIVATED", "Activated" }, { "DEACTIVATED", "Deactivated" } },
+    M = { "M", "M", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } },
+    G = { "G", "G", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } },
+    MOU = { "MOUSE", "MOUSE", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } },
+    MOD = { "MOD", "MOD", { "PRESSED", "Pressed" }, { "RELEASED", "Released" } }
+}
+
+--[[
+eventHandlers = {
+    lhc_G_PRESSED_1 = handlers.lhc.G1.Pressed(),
+    lhc_G_RELEASED_1 = handlers.lhc.G1.Released()
+}
+--]]
+
+eventHandlers = {}
+
+function OnEvent(event, arg, family)
+    poll.OnEvent(event, arg, family)
+    if family == nil then family = "" end
+    if arg == nil then arg = "" end
+    if event:sub(1, 1) == "P" then arg = "" end
+    local eventarg = event
+    if type(arg) == "number" and arg > 0 then eventarg = event.."_"..arg
+    elseif type(arg) == "string" and arg:len() > 0 then eventarg = event.."_"..arg
+    end
+    local fn = eventHandlers[family.."_"..eventarg]
+    if type(fn) == "function" then fn(event, arg, family)
+    else
+        fn = eventHandlers[eventarg]
+        if type(fn) == "function" then fn(event, arg, family)
+        end
+    end
+end
+
 Setup()
-SetMode(mode1)
-
-poll = new(PollManager).Init("lhc", 25)
-
-
