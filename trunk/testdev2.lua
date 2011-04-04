@@ -19,7 +19,7 @@ function Setup()
                         ReleaseKey(tapKeys[tapCount])
                     end
                 end, ButtonHandler),
-            G2 = BindMacro(tap("a"), tap("b", 50), tap("c"))
+            G2 = BindMacro({ tap("a"), tap("b", 50), tap("c") })
         },
         P = {
             Activated = function (event, arg, family) OutputLogMessage("Profile Activated\n") end,
@@ -212,12 +212,12 @@ function Macro(this)
     local isPolling = false
     local currentStep
     local delayUntil
-    local stepCount
     local loopCount
     
     local function PollRoutine()
         if isPolling == false then return false end
         
+        local stepCount = table.maxn(steps)
         if currentStep > stepCount then
             if loop == false then
                 isPolling = false
@@ -240,11 +240,9 @@ function Macro(this)
         end
     end
     
-    function this.Init(...)
-        stepCount = select('#', ...)
-        for i = 1, stepCount do
-            local item = select(i, ...)
-            table.insert(steps, item)
+    function this.Init(s)
+        if type(s) == "table" then
+            steps = s
         end
         return this
     end
@@ -263,28 +261,29 @@ function Macro(this)
     
     function this.Abort()
         isPolling = false
+        local stepCount = table.maxn(steps)
         for i = 1, stepCount do
             steps[i].Release()
         end
     end
 end
 
-function NewMacro(...)
-    return new(Macro).Init(...)
+function NewMacro(steps)
+    return new(Macro).Init(steps)
 end
 
-function BindMacro(...)
-    local this = new(Macro).Init(...);
-    inherit(this, ButtonHandler)
-    
-    function this.OnPressed()
-        this.Run()
-    end
+function BindMacro(steps)
+    return new(function(this)
+        this[Macro].Init(steps)
 
-    function this.OnReleased()
-        this.Abort()
-    end
-    return this
+        function this.OnPressed()
+            this.Run()
+        end
+
+        function this.OnReleased()
+            this.Abort()
+        end
+    end, ButtonHandler, Macro)
 end
 
 function PollMouse(this)
