@@ -1,3 +1,9 @@
+
+--[[---------------------------------------------------------------------------
+HISTORY
+00.01   2011-04-04  Initial release
+--]]---------------------------------------------------------------------------
+
 function Setup()
     poll = new(PollManager).Init("kb", 25)
     local pollModifiers = new(PollModifiers)
