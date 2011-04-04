@@ -3,8 +3,6 @@ function Setup()
     local pollModifiers = new(PollModifiers)
     local pollMouse = new(PollMouse)
 
-    local g2 = BindMacro(tap("a"), tap("b"), tap("c"))
-
     local mode1 = {
         kb = {
         },
@@ -21,7 +19,7 @@ function Setup()
                         ReleaseKey(tapKeys[tapCount])
                     end
                 end, ButtonHandler),
-            G2 = g2
+            G2 = BindMacro(tap("a"), tap("b", 50), tap("c"))
         },
         P = {
             Activated = function (event, arg, family) OutputLogMessage("Profile Activated\n") end,
@@ -41,7 +39,7 @@ function Setup()
     SetMode(mode1)
 
     pollModifiers.Start();
-    --pollMouse.Start();
+    pollMouse.Start();
 end
 
 function MacroKey(this)
@@ -53,8 +51,8 @@ function MacroKey(this)
 
     function this.Init(k, d, c)
         key = k
-        if type(d) == "number" then d = delay end
-        if type(c) == "number" then c = cooldown end
+        if type(d) == "number" then delay = d end
+        if type(c) == "number" then cooldown = c end
         lastRunTime = -cooldown
         return this
     end
@@ -229,8 +227,7 @@ function Macro(this)
         end
 
         local time = GetRunningTime()
-        OutputLogMessage(time..":"..delayUntil.."\n")
-        if time > delayUntil then
+        while time >= delayUntil and currentStep <= stepCount do
             delayUntil = time + steps[currentStep].Run()
             currentStep = currentStep + 1
         end
@@ -462,7 +459,7 @@ function PollManager(this)
     end
 
     function this.OnEvent(event, arg, family)
-        if event == "PROFILE_ACTIVATED" or (event == "M_RELEASED" and family == "kb") then
+        if event == "PROFILE_ACTIVATED" or (event == "M_RELEASED" and family == pollFamily) then
             polling = false
 
             local idx = 1
@@ -480,7 +477,7 @@ function PollManager(this)
             end
 
             if polling then
-                SetMKeyState(1, "kb")--GetMKey(arg, family), pollFamily)
+                SetMKeyState(GetMKey(arg, family), pollFamily)
                 Sleep(pollDelay)
             end
         end
@@ -601,10 +598,10 @@ function OnEvent(event, arg, family)
     elseif type(arg) == "string" and arg:len() > 0 then eventarg = event.."_"..arg
     end
     local fn = eventHandlers[family.."_"..eventarg]
-    if type(fn) == "function" then OutputLogMessage(eventCount.." : "..family..eventarg.."\n") fn(event, arg, family)
+    if type(fn) == "function" then fn(event, arg, family)
     else
         fn = eventHandlers[eventarg]
-        if type(fn) == "function" then OutputLogMessage(eventCount.." : "..family..eventarg.."\n") fn(event, arg, family)
+        if type(fn) == "function" then fn(event, arg, family)
         end
     end
     --OutputLogMessage(eventCount.." : "..family..eventarg.."\n")
