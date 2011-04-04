@@ -4,7 +4,7 @@ function Setup()
         },
         lhc = {
             G1 = new (function(this)
-                    this.Init(300, 2)
+                    this.Init(300, 4)
                     local tapKeys = { "a", "b", "c" }
 
                     function this.OnPressed(tapCount)
@@ -53,6 +53,24 @@ function ButtonHandler(this)
     local tapDuration = 0
     local tapMax = 0
 
+    local function PollRoutine()
+        local time = GetRunningTime() - pressTime
+        --OutputLogMessage("time "..time..", tapCount "..tapCount.."\n")
+        if time < tapDuration and tapCount < tapMax then
+            return true
+        end
+
+        isPolling = false
+        this.OnPressed(tapCount)
+
+        if isPressed == false then
+            this.OnReleased(tapCount)
+            tapCount = 0
+        end
+
+        return false
+    end
+
     function this.Init(multiTapSpan, maxTapCount)
         tapDuration = multiTapSpan
         tapMax = maxTapCount
@@ -63,7 +81,7 @@ function ButtonHandler(this)
         isPressed = true
 
         -- don't poll when only single taps are allowed
-		if tapMax <= 1 then
+        if tapMax <= 1 then
             pressTime = GetRunningTime()
             this.OnPressed(1)
             return
@@ -73,7 +91,7 @@ function ButtonHandler(this)
             tapCount = tapCount + 1
         end
 
-		if isPolling == false then
+        if isPolling == false then
             pressTime = GetRunningTime()
 
             poll.RegisterPollRoutine(PollRoutine)
@@ -95,84 +113,72 @@ function ButtonHandler(this)
             tapCount = 0
         end
     end
-
-    function PollRoutine()
-        local time = GetRunningTime() - pressTime
-        if time < tapDuration and tapCount < tapMax then
-            return true
-        end
-
-        isPolling = false
-        this.OnPressed(tapCount)
-
-        if isPressed == false then
-            this.OnReleased(tapCount)
-            tapCount = 0
-        end
-
-        return false
-    end
 end
 
 function PollManager(this)
-    local family = "kb"
-    local delay = 25
+    local pollFamily = "kb"
+    local pollDelay = 25
 
     local pressCount = 1
-    local pollMKeyState = GetMKeyState(family)
+    local pollMKeyState = 0
     local pollRoutines = {}
     local polling = false
     local initialized = false
 
-    local function GetMKey(arg, f)
-        if f == family and pollMKeyState ~= arg then
+    local function GetMKey(arg, family)
+        if arg == nil or family == nil then return pollMKeyState end
+        if family == pollFamily and pollMKeyState ~= arg then
             pollMKeyState = arg
         end
         return pollMKeyState
     end
 
+    pollCount = 0
+
     local function RunPollRoutines(event, arg, family)
+        pollCount = pollCount + 1
+        OutputLogMessage(pollCount.."\n")
         polling = false
 
         local idx = 1
         local routine = pollRoutines[1]
 
         while routine ~= nil do
-            polling = true
-
             if routine(event, arg, family) == false then
                 table.remove(pollRoutines, idx)
                 routine = pollRoutines[idx]
             else
+                polling = true
                 idx = idx + 1
                 routine = pollRoutines[idx]
             end
         end
 
-        return polling
+        if polling then
+            --OutputLogMessage("polling M = "..GetMKey(arg, family)..", f = "..pollFamily.."\n")
+            SetMKeyState(GetMKey(arg, family), pollFamily)
+            Sleep(pollDelay)
+        end
     end
 
-    function this.Init(f, d)
-        family = f or "kb"
-        delay = d or 25
+    function this.Init(family, delay)
+        pollFamily = family or "kb"
+        pollDelay = delay or 25
+        pollMKeyState = GetMKeyState(pollFamily)
         return this;
     end
 
-    function this.OnEvent(e, arg, f)
-        if f ~= family and e ~= "PROFILE_ACTIVATED" then
-            return
-        end
+    function this.OnEvent(event, arg, family)
+        
+        --if family ~= pollFamily and event ~= "PROFILE_ACTIVATED" then
+        --    return
+        --end
 
-        if e == "M_PRESSED" then
+        if event == "M_PRESSED" then
             pressCount = pressCount + 1
-        elseif e == "M_RELEASED" or e == "PROFILE_ACTIVATED" then
-            --initialized = true
+        elseif event == "M_RELEASED" or event == "PROFILE_ACTIVATED" then
             if pressCount == 1 then
-                if RunPollRoutines(e, arg, f) == true then
-                    OutputLogMessage(family)
-                    SetMKeyState(GetMKey(arg, f), family)
-                    Sleep(delay)
-                end
+                RunPollRoutines(event, arg, family)
             end
             pressCount = pressCount - 1
         end
@@ -182,8 +188,8 @@ function PollManager(this)
         if type(routine) == "function" then
             table.insert(pollRoutines, routine)
             --if initialized then
-        OutputLogMessage("RegisterPollRoutine "..type(routine).."\n")
-                this.OnEvent("PROFILE_ACTIVATED", pollMKeyState, family)
+            --OutputLogMessage("RegisterPollRoutine "..type(routine).."\n")
+            RunPollRoutines()
             --end
         end
     end
