@@ -28,7 +28,14 @@ function Setup()
         Mouse1 = new(function(this)
                 this.Init(200, 2)
                 local clickMessages = { "Mouse1 Clicked", "Mouse1 Double-Clicked" }
-                function this.OnPressed(clickCount) OutputLogMessage(clickMessages[clickCount].."\n") pollModifiers.Stop() end
+                function this.OnPressed(clickCount)
+                    OutputLogMessage(clickMessages[clickCount].."\n")
+                    if(clickCount == 1) then
+                        pollModifiers.Stop()
+                    else
+                        pollModifiers.Start()
+                    end
+                end
             end, ButtonHandler),
         ModCtrl = new(function(this)
                 function this.OnPressed() OutputLogMessage("Ctrl pressed\n") end
