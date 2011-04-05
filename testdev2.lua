@@ -30,7 +30,7 @@ function Setup()
             G4 = BindMacro({ mnudge({5, 5}) }),
             G5 = BindMacro({ mmove({0, 0}) }),
             G6 = BindMacro({ mwheel(5) }),
-            G7 = BindMacro({ mbdown(1) }),
+            G7 = BindMacro({ mbtap(1, 50), mbtap(1) }),
             G8 = BindMacro({ msave("Test") }),
             G9 = BindMacro({ mrecall("Test") }),
         },
