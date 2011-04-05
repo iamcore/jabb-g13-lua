@@ -14,7 +14,7 @@ function Setup()
         },
         lhc = {
             G1 = new(function(this)
-                    this.Init(25, 3)
+                    this.Init(300, 3)
                     local tapKeys = { "a", "b", "c" }
 
                     function this.OnPressed(tapCount)
@@ -25,7 +25,14 @@ function Setup()
                         ReleaseKey(tapKeys[tapCount])
                     end
                 end, ButtonHandler),
-            G2 = BindMacro({ tap("a"), tap("b", 50), tap("c") })
+            G2 = BindMacro({ down("rshift"), tap("D"), up("rshift"), tap("B", 50), tap("a") }),
+            G3 = BindMacro({ write("This is a TEST !!! (?)") }),
+            G4 = BindMacro({ mnudge({5, 5}) }),
+            G5 = BindMacro({ mmove({0, 0}) }),
+            G6 = BindMacro({ mwheel(5) }),
+            G7 = BindMacro({ mbdown(1) }),
+            G8 = BindMacro({ msave("Test") }),
+            G9 = BindMacro({ mrecall("Test") }),
         },
         P = {
             Activated = function (event, arg, family) OutputLogMessage("Profile Activated\n") end,
@@ -94,32 +101,58 @@ end
 
 function MacroKeyDown(this)
     inherit(this, MacroKey)
+    local shift = false
     
     function this.OnRun(key)
+        key, shift = GetKey(key)
+        if shift then PressKey("lshift") end
         PressKey(key)
         return true
     end
 
     function this.OnRelease(key)
         ReleaseKey(key)
+        if shift then ReleaseKey("lshift") end
     end
 end
 
 function MacroKeyUp(this)
     inherit(this, MacroKey)
+    local shift = false
     
     function this.OnRun(key)
+        key, shift = GetKey(key)
         ReleaseKey(key)
+        if shift then ReleaseKey("lshift") end
         return false
     end
 end
 
 function MacroKeyTap(this)
     inherit(this, MacroKey)
+    local shift = false
     
     function this.OnRun(key)
+        key, shift = GetKey(key)
+        if shift then PressKey("lshift") end
         PressAndReleaseKey(key)
+        if shift then ReleaseKey("lshift") end
         return false
+    end
+end
+
+function MacroWrite(this)
+    inherit(this, MacroKey)
+
+    function this.OnRun(text)
+        local key, shift
+        local len = text:len()
+        for i = 1,len do
+            key, shift = GetKey(text:sub(i, i))
+            if shift then PressKey("lshift") end
+            PressAndReleaseKey(key)
+            if shift then ReleaseKey("lshift") end
+        end
     end
 end
 
@@ -127,7 +160,7 @@ function MacroMNudge(this)
     inherit(this, MacroKey)
 
     function this.OnRun(coord)
-        MouseMoveRelative(coord[1], coord[2])
+        MoveMouseRelative(coord[1], coord[2])
         return false
     end
 end
@@ -136,7 +169,7 @@ function MacroMMove(this)
     inherit(this, MacroKey)
 
     function this.OnRun(coord)
-        MouseMoveTo(coord[1], coord[2])
+        MoveMouseTo(coord[1], coord[2])
         return false
     end
 end
@@ -182,34 +215,50 @@ function MacroMButtonTap(this)
     end
 end
 
+mousePositions = {}
 function MacroMSavePos(this)
     inherit(this, MacroKey)
     local x = 0
     local y = 0
 
-    function this.OnRun()
+    function this.OnRun(name)
         x, y = GetMousePosition()
+        mousePositions[name] = this
         return false
     end
 
     function this.Recall()
-        MouseMoveTo(x, y)
+        MoveMouseTo(x, y)
     end
 
     function this.X(v) if v ~= nil then x = v return this end return x end
     function this.Y(v) if v ~= nil then y = v return this end return y end
 end
 
+function MacroMRecallPos(this)
+    inherit(this, MacroKey)
+
+    function this.OnRun(name)
+        local pos = mousePositions[name]
+        if pos ~= nil then
+            pos.Recall()
+        end
+        return false
+    end
+end
+
 function down(key, delay, cooldown) return new(MacroKeyDown).Init(key, delay, cooldown) end
 function up(key, delay, cooldown) return new(MacroKeyUp).Init(key, delay, cooldown) end
 function tap(key, delay, cooldown) return new(MacroKeyTap).Init(key, delay, cooldown) end
+function write(text, delay, cooldown) return new(MacroWrite).Init(text, delay, cooldown) end
 function mnudge(coord, delay, cooldown) return new(MacroMNudge).Init(coord, delay, cooldown) end
 function mmove(coord, delay, cooldown) return new(MacroMMove).Init(coord, delay, cooldown) end
 function mwheel(amount, delay, cooldown) return new(MacroMWheel).Init(amount, delay, cooldown) end
 function mbdown(button, delay, cooldown) return new(MacroMButtonDown).Init(button, delay, cooldown) end
 function mbup(button, delay, cooldown) return new(MacroMButtonUp).Init(button, delay, cooldown) end
 function mbtap(button, delay, cooldown) return new(MacroMButtonTap).Init(button, delay, cooldown) end
-function msave(delay, cooldown) return new(MacroMSavePos).Init(nil, delay, cooldown) end
+function msave(name, delay, cooldown) return new(MacroMSavePos).Init(name, delay, cooldown) end
+function mrecall(name, delay, cooldown) return new (MacroMRecallPos).Init(name, delay, cooldown) end
 
 function Macro(this)
     local steps = {}
@@ -578,7 +627,8 @@ end
 function new(constructor, ...)
     local this = {}
     inherit(this, ...)
-    constructor(this);
+    constructor(this)
+    this.ctor = constructor
     return this
 end
 
@@ -622,26 +672,26 @@ end
 
 shiftKeys = {
     ["~"] = "tilde",
-    ["!"] = "",
-    ["@"] = "",
-    ["#"] = "",
-    ["$"] = "",
-    ["%"] = "",
-    ["^"] = "",
-    ["&"] = "",
-    ["*"] = "",
-    ["("] = "",
-    [")"] = "",
-    ["_"] = "",
-    ["+"] = "",
-    ["{"] = "",
-    ["}"] = "",
-    ["|"] = "",
-    [":"] = "",
-    ['"'] = "",
-    ["<"] = "",
-    [">"] = "",
-    ["?"] = "",
+    ["!"] = "1",
+    ["@"] = "2",
+    ["#"] = "3",
+    ["$"] = "4",
+    ["%"] = "5",
+    ["^"] = "6",
+    ["&"] = "7",
+    ["*"] = "8",
+    ["("] = "9",
+    [")"] = "0",
+    ["_"] = "minus",
+    ["+"] = "equal",
+    ["{"] = "lbracket",
+    ["}"] = "rbracket",
+    ["|"] = "backslash",
+    [":"] = "semicolon",
+    ['"'] = "quote",
+    ["<"] = "comma",
+    [">"] = "period",
+    ["?"] = "slash",
     ["A"] = "a",
     ["B"] = "b",
     ["C"] = "c",
@@ -671,17 +721,37 @@ shiftKeys = {
 }
 
 noshiftKeys = {
-    ["`"] = "",
-    ["-"] = "",
-    ["="] = "",
-    ["["] = "",
-    ["]"] = "",
-    ["\\"] = "",
-    [";"] = "",
-    ["'"] = "",
-    [","] = "",
-    ["."] = "",
-    ["/"] = ""
+    ["`"] = "tilde",
+    ["-"] = "minus",
+    ["="] = "equal",
+    ["["] = "lbracket",
+    ["]"] = "rbracket",
+    ["\\"] = "backslash",
+    [";"] = "semicolon",
+    ["'"] = "quote",
+    [","] = "comma",
+    ["."] = "period",
+    ["/"] = "slash",
+    ["\t"] = "tab",
+    ["\n"] = "enter",
+    [" "] = "spacebar"
 }
+
+function GetKey(key)
+    if key:len() == 1 then
+        local k = shiftKeys[key]
+        if k ~= nil then
+            return k, true
+        end
+
+        local k = noshiftKeys[key]
+        if k ~= nil then
+            return k, false
+        end
+
+        return key, false
+    end
+    return key, false
+end
 
 Setup()
