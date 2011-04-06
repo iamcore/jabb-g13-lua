@@ -1,8 +1,3 @@
---[[---------------------------------------------------------------------------
-HISTORY
-00.01   2011-04-05  Initial revision
---]]---------------------------------------------------------------------------
-
 function Setup()
     poll = new(PollManager).Init("kb", 25)
     local pollModifiers = new(PollModifiers)
@@ -17,9 +12,11 @@ function Setup()
                     Pressed = function() OutputLogMessage("Handler G1 Pressed\n") end,
                     Released = function() OutputLogMessage("Handler G1 Released\n") end
                 }
-            end
+            end,
+            G2 = BindMacro({ tap("a"), tap("B", 100), tap("c", 100), tap("D") }),
+            G3 = BindMacro({ msave("test") }),
+            G4 = BindMacro({ mrecall("test") }),
         },
-        G2 = function() OutputLogMessage("G2\n") end,
         P = function() OutputLogMessage("P\n") end
     }
 
@@ -28,6 +25,337 @@ function Setup()
     pollModifiers.Start()
     pollMouse.Start()
 end
+
+do -- Begin Macro scope
+    function MacroKey(this)
+        local key
+        local delay = 0
+        local cooldown = 0
+        local lastRunTime = nil
+        local isKeyDown = false
+
+        function this.Init(k, d, c)
+            key = k
+            if type(d) == "number" then delay = d end
+            if type(c) == "number" then cooldown = c end
+            lastRunTime = -cooldown
+            return this
+        end
+
+        function this.Run()
+            local time = GetRunningTime()
+            if time >= lastRunTime + cooldown then
+                lastRunTime = time
+                isKeyDown = this.OnRun(key)
+            end
+
+            return delay
+        end
+
+        function this.Release()
+            if isKeyDown then this.OnRelease(key) end
+        end
+
+        function this.IsKeyDown()
+            return isKeyDown
+        end
+
+        function this.OnRun(key) end
+        function this.OnRelease(key) end
+    end
+
+    --[[ not sure if this is necessary
+    function MacroKeyFactory()
+        local ctor, key, delay, cooldown
+
+        function this.Init(c, k, d, cd)
+            ctor, key, delay, cooldown = c, k, d, cd
+        end
+
+        function this.Create()
+            return new(ctor).Init(key, delay, cooldown)
+        end
+    end
+    ]]
+
+    function MacroKeyDown(this)
+        inherit(this, MacroKey)
+        local shift = false
+
+        function this.OnRun(key)
+            key, shift = GetKey(key)
+            if shift then PressKey("lshift") end
+            PressKey(key)
+            return true
+        end
+
+        function this.OnRelease(key)
+            ReleaseKey(key)
+            if shift then ReleaseKey("lshift") end
+        end
+    end
+
+    function MacroKeyUp(this)
+        inherit(this, MacroKey)
+        local shift = false
+
+        function this.OnRun(key)
+            key, shift = GetKey(key)
+            ReleaseKey(key)
+            if shift then ReleaseKey("lshift") end
+            return false
+        end
+    end
+
+    function MacroKeyTap(this)
+        inherit(this, MacroKey)
+        local shift = false
+
+        function this.OnRun(key)
+            key, shift = GetKey(key)
+            if shift then PressKey("lshift") end
+            PressAndReleaseKey(key)
+            if shift then ReleaseKey("lshift") end
+            return false
+        end
+    end
+
+    function MacroWrite(this)
+        inherit(this, MacroKey)
+
+        function this.OnRun(text)
+            local key, shift
+            local len = text:len()
+            for i = 1,len do
+                key, shift = GetKey(text:sub(i, i))
+                if shift then PressKey("lshift") end
+                PressAndReleaseKey(key)
+                if shift then ReleaseKey("lshift") end
+            end
+        end
+    end
+
+    function MacroMNudge(this)
+        inherit(this, MacroKey)
+
+        function this.OnRun(coord)
+            MoveMouseRelative(coord[1], coord[2])
+            return false
+        end
+    end
+
+    function MacroMMove(this)
+        inherit(this, MacroKey)
+
+        function this.OnRun(coord)
+            MoveMouseTo(coord[1], coord[2])
+            return false
+        end
+    end
+
+    function MacroMWheel(this)
+        inherit(this, MacroKey)
+
+        function this.OnRun(amount)
+            MoveMouseWheel(amount)
+            return false
+        end
+    end
+
+    function MacroMButtonDown(this)
+        inherit(this, MacroKey)
+
+        function this.OnRun(button)
+            PressMouseButton(button)
+            return true
+        end
+
+        function this.OnRelease(button)
+            ReleaseMouseButton(button)
+            return true
+        end
+    end
+
+    function MacroMButtonUp(this)
+        inherit(this, MacroKey)
+
+        function this.OnRun(button)
+            ReleaseMouseButton(button)
+            return false
+        end
+    end
+
+    function MacroMButtonTap(this)
+        inherit(this, MacroKey)
+
+        function this.OnRun(button)
+            PressAndReleaseMouseButton(button)
+            return false
+        end
+    end
+
+    local mousePositions = {}
+    function MacroMSavePos(this)
+        inherit(this, MacroKey)
+        local x = 0
+        local y = 0
+
+        function this.OnRun(name)
+            x, y = GetMousePosition()
+            mousePositions[name] = this
+            return false
+        end
+
+        function this.Recall()
+            MoveMouseTo(x, y)
+        end
+
+        function this.X(v) if v ~= nil then x = v return this end return x end
+        function this.Y(v) if v ~= nil then y = v return this end return y end
+    end
+
+    function MacroMRecallPos(this)
+        inherit(this, MacroKey)
+
+        function this.OnRun(name)
+            local pos = mousePositions[name]
+            if pos ~= nil then
+                pos.Recall()
+            end
+            return false
+        end
+    end
+
+    function down(key, delay, cooldown) return new(MacroKeyDown).Init(key, delay, cooldown) end
+    function up(key, delay, cooldown) return new(MacroKeyUp).Init(key, delay, cooldown) end
+    function tap(key, delay, cooldown) return new(MacroKeyTap).Init(key, delay, cooldown) end
+    function write(text, delay, cooldown) return new(MacroWrite).Init(text, delay, cooldown) end
+    function mnudge(coord, delay, cooldown) return new(MacroMNudge).Init(coord, delay, cooldown) end
+    function mmove(coord, delay, cooldown) return new(MacroMMove).Init(coord, delay, cooldown) end
+    function mwheel(amount, delay, cooldown) return new(MacroMWheel).Init(amount, delay, cooldown) end
+    function mbdown(button, delay, cooldown) return new(MacroMButtonDown).Init(button, delay, cooldown) end
+    function mbup(button, delay, cooldown) return new(MacroMButtonUp).Init(button, delay, cooldown) end
+    function mbtap(button, delay, cooldown) return new(MacroMButtonTap).Init(button, delay, cooldown) end
+    function msave(name, delay, cooldown) return new(MacroMSavePos).Init(name, delay, cooldown) end
+    function mrecall(name, delay, cooldown) return new (MacroMRecallPos).Init(name, delay, cooldown) end
+
+    function Macro(this)
+        local steps = {}
+        local unreleased = {}
+        local loop = false
+        local isPolling = false
+        local currentStep
+        local delayUntil
+        local loopCount
+
+        local function OnFinished()
+            this.Clear()
+        end
+
+        local function PollRoutine()
+            if isPolling == false then OnFinished() return false end
+
+            local stepCount = table.maxn(steps)
+            if currentStep > stepCount then
+                if loop == false then
+                    isPolling = false
+                    OnFinished()
+                    return false
+                elseif type(loop) == "number" then
+                    if loopCount >= loop then
+                        isPolling = false
+                        OnFinished()
+                        return false
+                    else
+                        loopCount = loopCount + 1
+                        currentStep = 1
+                    end
+                end
+            end
+
+            local time = GetRunningTime()
+            while time >= delayUntil and currentStep <= stepCount do
+                delayUntil = time + steps[currentStep].Run()
+                currentStep = currentStep + 1
+            end
+        end
+
+        function this.Init(s)
+            if type(s) == "table" then
+                steps = s
+            end
+            return this
+        end
+
+        function this.Loop(v) if v ~= nil then loop = v return this end return loop end
+
+        function this.Run()
+            if isPolling == false then
+                isPolling = true
+                currentStep = 1
+                loopCount = 1
+                delayUntil = -1
+                poll.RegisterPollRoutine(PollRoutine)
+            end
+        end
+
+        function this.Clear()
+            local stepCount = table.maxn(steps)
+            for i = 1, stepCount do
+                steps[i].Release()
+            end
+        end
+
+        function this.Abort()
+            isPolling = false
+            OnFinished()
+        end
+
+        function this.IsRunning()
+            return isPolling
+        end
+    end
+
+    function MacroFactory(this) inherit(this)
+        local behavior, steps
+
+        function this.Init(b, s)
+            behavior, steps = b, s
+            return this
+        end
+
+        function this.Create()
+            local macro = new(function(self)
+                self[Macro].Init(steps)
+            end, ButtonHandler, Macro, behavior)
+            return macro
+        end
+    end
+
+    function AbortOnRelease(this)
+        function this.OnPressed()
+            this.Run()
+        end
+
+        function this.OnReleased()
+            this.Abort()
+        end
+    end
+
+    function RunToEnd(this)
+        function this.OnPressed()
+            this.Run()
+        end
+    end
+
+    function Bind(behavior, steps)
+        return new(MacroFactory).Init(behavior, steps).Create
+    end
+
+    function BindMacro(steps)
+        return Bind(RunToEnd, steps)
+    end
+end -- End Macro scope
 
 function ButtonHandler(this)
     local isPressed = false
